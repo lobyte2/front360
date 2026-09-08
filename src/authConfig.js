@@ -3,6 +3,7 @@ export const msalConfig = {
         clientId: "4a72e40f-1d5a-497a-b040-d2fa5acb61fd", // ID de aplicación Frontend
         authority: "https://login.microsoftonline.com/dd140621-3398-4bfe-805b-9c162df51706", // ID del Tenant
         redirectUri: "http://localhost:5173",
+        postLogoutRedirectUri: "http://localhost:5173" // Asegura el retorno limpio tras cerrar sesión
     },
     cache: {
         cacheLocation: "sessionStorage", 
