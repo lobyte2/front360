@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { loginRequest } from './authConfig';
+import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package } from '@phosphor-icons/react';
 
 const API_GATEWAY_URL = "https://ap96rduot1.execute-api.us-east-1.amazonaws.com/api";
 const USUARIO_ID = 1; 
@@ -104,53 +105,127 @@ function App() {
 
     if (!isAuthenticated) {
         return (
-            <div style={styles.loginContainer}>
-                <h1>🍺 Botillería Pedidos360</h1>
-                <p>Inicia sesión para acceder al catálogo.</p>
-                <button style={styles.btnPrimary} onClick={handleLogin}>Ingresar con Azure AD</button>
+            <div className="min-h-[100dvh] bg-zinc-950 text-zinc-50 flex flex-col items-center justify-center p-6 font-sans">
+                <div className="w-full max-w-md flex flex-col items-center text-center space-y-8">
+                    <div className="p-4 bg-zinc-900 rounded-2xl">
+                        <Wine size={48} weight="duotone" className="text-emerald-400" />
+                    </div>
+                    <div className="space-y-3">
+                        <h1 className="text-4xl md:text-5xl font-medium tracking-tight">Pedidos360</h1>
+                        <p className="text-zinc-400 text-lg">Acceso exclusivo al catálogo de bodega.</p>
+                    </div>
+                    <button 
+                        onClick={handleLogin}
+                        className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-medium px-6 py-4 rounded-xl transition-all active:scale-[0.98]"
+                    >
+                        Ingresar con Azure AD <ArrowRight size={20} />
+                    </button>
+                </div>
             </div>
         );
     }
 
     return (
-        <div style={styles.appContainer}>
-            <nav style={styles.navbar}>
-                <h2>🍺 Botillería 360</h2>
-                <div style={styles.navLinks}>
-                    <button style={styles.btnNav} onClick={obtenerProductos}>Catálogo</button>
-                    <button style={styles.btnNav} onClick={obtenerCarrito}>Carrito</button>
-                    <button style={styles.btnNav} onClick={obtenerPerfil}>Mi Perfil</button>
-                    <button style={styles.btnDanger} onClick={handleLogout}>Salir</button>
-                </div>
-            </nav>
+        <div className="min-h-[100dvh] bg-zinc-950 text-zinc-50 font-sans selection:bg-emerald-500/30 selection:text-emerald-200">
+            {/* Header */}
+            <header className="sticky top-0 z-50 w-full border-b border-zinc-800/50 bg-zinc-950/80 backdrop-blur-md">
+                <div className="max-w-7xl mx-auto px-6 h-20 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="p-2 bg-zinc-900 rounded-lg">
+                            <Wine size={24} weight="duotone" className="text-emerald-400" />
+                        </div>
+                        <span className="text-xl font-medium tracking-tight">Pedidos360</span>
+                    </div>
+                    
+                    <nav className="hidden md:flex items-center gap-8">
+                        <button onClick={obtenerProductos} className={`text-sm font-medium transition-colors ${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Catálogo</button>
+                        <button onClick={obtenerCarrito} className={`text-sm font-medium transition-colors ${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Carrito</button>
+                        <button onClick={obtenerPerfil} className={`text-sm font-medium transition-colors ${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Perfil</button>
+                    </nav>
 
-            <main style={styles.main}>
+                    <div className="flex items-center gap-4">
+                        <div className="md:hidden flex gap-4">
+                            <button onClick={obtenerProductos} className={`${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400'}`}><Package size={24} /></button>
+                            <button onClick={obtenerCarrito} className={`${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400'}`}><ShoppingCart size={24} /></button>
+                            <button onClick={obtenerPerfil} className={`${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400'}`}><User size={24} /></button>
+                        </div>
+                        <div className="w-px h-6 bg-zinc-800 hidden md:block"></div>
+                        <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-100 transition-colors" aria-label="Salir">
+                            <SignOut size={24} />
+                        </button>
+                    </div>
+                </div>
+            </header>
+
+            {/* Main Content */}
+            <main className="max-w-7xl mx-auto px-6 py-12 md:py-20">
+                
+                {/* View: Catálogo */}
                 {vista === 'catalogo' && (
-                    <div style={styles.grid}>
-                        {productos && productos.length > 0 ? productos.map((prod, index) => (
-                            <div key={index} style={styles.card}>
-                                {/* Etiqueta img agregada para mostrar la imagen */}
-                                <img 
-                                    src={prod.imagen || 'https://via.placeholder.com/200x200?text=Sin+Imagen'} 
-                                    alt={prod.nombre} 
-                                    style={{ width: '100%', height: '150px', objectFit: 'cover', borderRadius: '5px', marginBottom: '10px' }} 
-                                />
-                                <h4 style={{ margin: '5px 0' }}>{prod.nombre || `Producto ${prod.identificador || prod.id}`}</h4>
-                                <p style={styles.precio}>${prod.precio || 0}</p>
-                                <button style={styles.btnPrimary} onClick={() => agregarAlCarrito(prod)}>
-                                    Agregar al Carrito
-                                </button>
-                            </div>
-                        )) : <p>Cargando catálogo o sin datos quemados...</p>}
+                    <div className="space-y-12">
+                        <header className="max-w-2xl">
+                            <h2 className="text-4xl md:text-5xl font-medium tracking-tight mb-4">Catálogo</h2>
+                            <p className="text-zinc-400 text-lg leading-relaxed">Selección de vinos y destilados de nuestra bodega principal. Añade los productos que desees a tu orden.</p>
+                        </header>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+                            {productos && productos.length > 0 ? productos.map((prod, index) => (
+                                <article key={index} className="group relative flex flex-col bg-zinc-900/50 border border-zinc-800/50 rounded-2xl overflow-hidden transition-all hover:bg-zinc-900">
+                                    <div className="aspect-square bg-zinc-800 overflow-hidden relative">
+                                        <img 
+                                            src={prod.imagen || 'https://images.unsplash.com/photo-1569528020524-7489cb0f56a5?auto=format&fit=crop&q=80&w=800'} 
+                                            alt={prod.nombre} 
+                                            className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105 opacity-80 group-hover:opacity-100" 
+                                        />
+                                        <div className="absolute top-4 right-4 bg-zinc-950/80 backdrop-blur px-3 py-1 rounded-full border border-zinc-700/50">
+                                            <span className="text-sm font-mono font-medium">${prod.precio || 0}</span>
+                                        </div>
+                                    </div>
+                                    <div className="p-6 flex flex-col flex-grow">
+                                        <h3 className="text-lg font-medium mb-1 truncate" title={prod.nombre || `Producto ${prod.identificador || prod.id}`}>
+                                            {prod.nombre || `Producto ${prod.identificador || prod.id}`}
+                                        </h3>
+                                        <p className="text-zinc-500 text-sm mb-6 font-mono uppercase tracking-widest">Id: {prod.identificador || prod.id}</p>
+                                        <div className="mt-auto">
+                                            <button 
+                                                onClick={() => agregarAlCarrito(prod)}
+                                                className="w-full flex items-center justify-center gap-2 bg-zinc-100 hover:bg-white text-zinc-950 font-medium px-4 py-3 rounded-xl transition-all active:scale-[0.98]"
+                                            >
+                                                Agregar <ShoppingCart size={18} />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </article>
+                            )) : (
+                                <div className="col-span-full py-20 text-center border border-dashed border-zinc-800 rounded-2xl">
+                                    <p className="text-zinc-500">No hay productos disponibles en este momento.</p>
+                                </div>
+                            )}
+                        </div>
                     </div>
                 )}
 
+                {/* View: Carrito */}
                 {vista === 'carrito' && (
-                    <div style={styles.card}>
-                        <h3>Mi Carrito</h3>
+                    <div className="space-y-12 max-w-4xl mx-auto">
+                        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 border-b border-zinc-800/50 pb-8">
+                            <div>
+                                <h2 className="text-4xl md:text-5xl font-medium tracking-tight mb-4">Tu Orden</h2>
+                                <p className="text-zinc-400 text-lg">Revisa los productos antes de finalizar la compra.</p>
+                            </div>
+                            {carrito?.articulos?.length > 0 && (
+                                <button 
+                                    onClick={limpiarCarrito}
+                                    className="flex items-center gap-2 text-zinc-400 hover:text-red-400 transition-colors text-sm font-medium"
+                                >
+                                    <Trash size={18} /> Vaciar orden
+                                </button>
+                            )}
+                        </header>
+
                         {carrito && carrito.articulos && carrito.articulos.length > 0 ? (
-                            <>
-                                <ul style={{ listStyle: 'none', padding: 0 }}>
+                            <div className="space-y-8">
+                                <div className="divide-y divide-zinc-800/50">
                                     {carrito.articulos.reduce((acumulador, item) => {
                                         const existente = acumulador.find(i => i.idProducto === item.idProducto);
                                         if (existente) {
@@ -166,39 +241,95 @@ function App() {
                                         const subtotal = precio * item.cantidad;
 
                                         return (
-                                            <li key={index} style={styles.cartItem}>
-                                                <span style={{ textAlign: 'left', width: '40%' }}><strong>{nombre}</strong></span>
-                                                <span>${precio} x {item.cantidad}</span>
-                                                <strong style={{ color: '#27ae60' }}>${subtotal}</strong>
-                                            </li>
+                                            <div key={index} className="flex flex-col md:flex-row md:items-center justify-between py-6 gap-4">
+                                                <div className="flex items-center gap-4">
+                                                    <div className="w-16 h-16 bg-zinc-900 rounded-lg overflow-hidden flex-shrink-0">
+                                                        <img 
+                                                            src={productoInfo?.imagen || 'https://images.unsplash.com/photo-1569528020524-7489cb0f56a5?auto=format&fit=crop&q=80&w=200'} 
+                                                            alt={nombre}
+                                                            className="w-full h-full object-cover opacity-80"
+                                                        />
+                                                    </div>
+                                                    <div>
+                                                        <h4 className="text-lg font-medium">{nombre}</h4>
+                                                        <p className="text-zinc-500 text-sm font-mono">${precio} x {item.cantidad}</p>
+                                                    </div>
+                                                </div>
+                                                <div className="text-right">
+                                                    <span className="text-xl font-medium text-emerald-400">${subtotal}</span>
+                                                </div>
+                                            </div>
                                         );
                                     })}
-                                </ul>
-                                <h3 style={{ textAlign: 'right', color: '#2c3e50', borderTop: '2px solid #eee', paddingTop: '10px' }}>
-                                    Total: ${carrito.articulos.reduce((total, item) => {
-                                        const prod = productos.find(p => (p.identificador || p.id) === item.idProducto);
-                                        return total + (prod ? prod.precio * item.cantidad : 0);
-                                    }, 0)}
-                                </h3>
-                                <button style={styles.btnDanger} onClick={limpiarCarrito}>Vaciar Carrito</button>
-                            </>
+                                </div>
+                                
+                                <div className="bg-zinc-900/50 rounded-2xl p-6 md:p-8 flex flex-col md:flex-row md:items-center justify-between gap-6 border border-zinc-800/50">
+                                    <div>
+                                        <p className="text-zinc-400 text-sm mb-1">Total a pagar</p>
+                                        <p className="text-3xl font-medium text-emerald-400">
+                                            ${carrito.articulos.reduce((total, item) => {
+                                                const prod = productos.find(p => (p.identificador || p.id) === item.idProducto);
+                                                return total + (prod ? prod.precio * item.cantidad : 0);
+                                            }, 0)}
+                                        </p>
+                                    </div>
+                                    <button className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-medium px-8 py-4 rounded-xl transition-all active:scale-[0.98] w-full md:w-auto">
+                                        Proceder al pago <ArrowRight size={20} />
+                                    </button>
+                                </div>
+                            </div>
                         ) : (
-                            <p>Tu carrito está vacío.</p>
+                            <div className="py-20 text-center border border-dashed border-zinc-800 rounded-2xl">
+                                <ShoppingCart size={48} className="mx-auto text-zinc-600 mb-4" />
+                                <p className="text-zinc-400 text-lg">Tu orden está vacía.</p>
+                                <button 
+                                    onClick={obtenerProductos}
+                                    className="mt-6 text-emerald-400 hover:text-emerald-300 font-medium"
+                                >
+                                    Volver al catálogo &rarr;
+                                </button>
+                            </div>
                         )}
                     </div>
                 )}
 
+                {/* View: Perfil */}
                 {vista === 'perfil' && (
-                    <div style={styles.card}>
-                        <h3>Perfil de Usuario</h3>
+                    <div className="max-w-2xl mx-auto space-y-12">
+                        <header>
+                            <h2 className="text-4xl md:text-5xl font-medium tracking-tight mb-4">Perfil</h2>
+                            <p className="text-zinc-400 text-lg">Información de tu cuenta.</p>
+                        </header>
+
                         {perfil ? (
-                            <div style={{ textAlign: 'left', display: 'inline-block', marginTop: '15px' }}>
-                                <p><strong>ID de Sistema:</strong> {perfil.identificador}</p>
-                                <p><strong>Usuario (Azure):</strong> {perfil.nombreUsuario}</p>
-                                <p><strong>Contraseña:</strong> *********</p>
+                            <div className="bg-zinc-900/50 border border-zinc-800/50 rounded-2xl p-8 space-y-6">
+                                <div className="flex items-center gap-6 pb-6 border-b border-zinc-800/50">
+                                    <div className="w-20 h-20 bg-zinc-800 rounded-full flex items-center justify-center text-zinc-500">
+                                        <User size={32} />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-2xl font-medium">{perfil.nombreUsuario}</h3>
+                                        <p className="text-zinc-500 font-mono text-sm mt-1">ID: {perfil.identificador}</p>
+                                    </div>
+                                </div>
+                                <div className="space-y-4">
+                                    <div>
+                                        <p className="text-sm text-zinc-500 mb-1">Usuario de Azure AD</p>
+                                        <p className="font-medium">{perfil.nombreUsuario}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-zinc-500 mb-1">Estado de la cuenta</p>
+                                        <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-emerald-500"></div>
+                                            <span className="font-medium text-emerald-400">Activa</span>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
                         ) : (
-                            <p>No se encontraron datos quemados para el usuario {accounts[0]?.username} en el backend.</p>
+                            <div className="py-20 text-center border border-dashed border-zinc-800 rounded-2xl">
+                                <p className="text-zinc-500">No se pudo cargar la información del perfil para {accounts[0]?.username}.</p>
+                            </div>
                         )}
                     </div>
                 )}
@@ -206,20 +337,5 @@ function App() {
         </div>
     );
 }
-
-const styles = {
-    loginContainer: { textAlign: 'center', marginTop: '100px', fontFamily: 'sans-serif' },
-    appContainer: { fontFamily: 'sans-serif', backgroundColor: '#f4f4f4', minHeight: '100vh' },
-    navbar: { display: 'flex', justifyContent: 'space-between', padding: '1rem 2rem', backgroundColor: '#2c3e50', color: 'white', alignItems: 'center' },
-    navLinks: { display: 'flex', gap: '10px' },
-    main: { padding: '2rem', maxWidth: '900px', margin: '0 auto' },
-    grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))', gap: '20px' },
-    card: { backgroundColor: 'white', padding: '20px', borderRadius: '8px', boxShadow: '0 2px 5px rgba(0,0,0,0.1)', textAlign: 'center' },
-    precio: { fontSize: '1.2rem', fontWeight: 'bold', color: '#27ae60' },
-    cartItem: { display: 'flex', justifyContent: 'space-between', padding: '10px 0', borderBottom: '1px solid #ddd' },
-    btnPrimary: { backgroundColor: '#3498db', color: 'white', border: 'none', padding: '10px', borderRadius: '5px', cursor: 'pointer', width: '100%', marginTop: '10px' },
-    btnDanger: { backgroundColor: '#e74c3c', color: 'white', border: 'none', padding: '10px', borderRadius: '5px', cursor: 'pointer', marginTop: '10px' },
-    btnNav: { backgroundColor: 'transparent', color: 'white', border: '1px solid white', padding: '8px 12px', borderRadius: '5px', cursor: 'pointer' },
-};
 
 export default App;
