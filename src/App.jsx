@@ -100,6 +100,36 @@ function App() {
         }
     };
 
+    const procederAlPago = async () => {
+        if (!carrito || !carrito.articulos || carrito.articulos.length === 0) return;
+        
+        const total = carrito.articulos.reduce((sum, item) => {
+            const prod = productos.find(p => (p.identificador || p.id) === item.idProducto);
+            return sum + (prod ? prod.precio * item.cantidad : 0);
+        }, 0);
+
+        const itemsOrden = carrito.articulos.map(item => ({
+            productoId: item.idProducto,
+            cantidad: item.cantidad
+        }));
+
+        try {
+            await peticionAutenticada('/ordenes', {
+                method: 'POST',
+                body: JSON.stringify({
+                    usuarioId: accounts[0]?.username || "anonimo",
+                    items: itemsOrden,
+                    total: total
+                })
+            });
+            alert("Orden de compra creada exitosamente. Te llegara un correo pronto y tu pedido pasara a despachos.");
+            await limpiarCarrito();
+        } catch (error) {
+            console.error("Error al crear la orden:", error);
+            alert("Hubo un error al procesar el pago.");
+        }
+    };
+
     const handleLogin = () => instance.loginRedirect(loginRequest);
     const handleLogout = () => instance.logoutRedirect();
 
@@ -273,7 +303,7 @@ function App() {
                                             }, 0)}
                                         </p>
                                     </div>
-                                    <button className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-medium px-8 py-4 rounded-xl transition-all active:scale-[0.98] w-full md:w-auto">
+                                    <button onClick={procederAlPago} className="flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-medium px-8 py-4 rounded-xl transition-all active:scale-[0.98] w-full md:w-auto">
                                         Proceder al pago <ArrowRight size={20} />
                                     </button>
                                 </div>
