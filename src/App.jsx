@@ -114,7 +114,8 @@ function App() {
         }));
 
         try {
-            await peticionAutenticada('/ordenes', {
+            //CAMBIO: Se agregó '/nueva' a la ruta '/ordenes'
+            await peticionAutenticada('/ordenes/nueva', {
                 method: 'POST',
                 body: JSON.stringify({
                     usuarioId: accounts[0]?.username || "anonimo",
