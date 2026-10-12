@@ -14,13 +14,19 @@ function App() {
     const [productos, setProductos] = useState([]);
     const [carrito, setCarrito] = useState(null);
     const [perfil, setPerfil] = useState(null);
-    const [notificacion, setNotificacion] = useState(null);
+    const [notificaciones, setNotificaciones] = useState([]);
 
     const mostrarNotificacion = (mensaje, tipo = 'exito') => {
-        setNotificacion({ mensaje, tipo });
+        const id = Date.now() + '-' + Math.random().toString(36).substring(2, 6);
+        setNotificaciones(prev => [...prev, { id, mensaje, tipo }]);
+
         setTimeout(() => {
-            setNotificacion(null);
-        }, 3500);
+            setNotificaciones(prev => prev.filter(n => n.id !== id));
+        }, 5000); // 5 segundos para que haya buen tiempo de lectura
+    };
+
+    const cerrarNotificacion = (id) => {
+        setNotificaciones(prev => prev.filter(n => n.id !== id));
     };
 
     useEffect(() => {
@@ -88,14 +94,18 @@ function App() {
         }
     };
 
-    const limpiarCarrito = async () => {
+    const limpiarCarrito = async (mostrarToast = true) => {
         try {
             await peticionAutenticada(`/carrito/${USUARIO_ID}/limpiar`, { method: 'DELETE' });
-            mostrarNotificacion("Carrito limpiado correctamente.", "info");
+            if (mostrarToast) {
+                mostrarNotificacion("Carrito limpiado correctamente.", "info");
+            }
             obtenerCarrito();
         } catch (error) {
             console.error("Error al limpiar carrito:", error);
-            mostrarNotificacion("Error al limpiar el carrito.", "error");
+            if (mostrarToast) {
+                mostrarNotificacion("Error al limpiar el carrito.", "error");
+            }
         }
     };
 
@@ -134,7 +144,7 @@ function App() {
                 })
             });
             mostrarNotificacion("¡Orden creada con éxito! Se notificará por correo y pasará a despachos.", "exito");
-            await limpiarCarrito();
+            await limpiarCarrito(false);
         } catch (error) {
             console.error("Error al crear la orden:", error);
             mostrarNotificacion("Hubo un error al procesar el pago.", "error");
@@ -376,34 +386,41 @@ function App() {
                 )}
             </main>
 
-            {/* Notificación Toast flotante en pantalla */}
-            {notificacion && (
-                <div className="fixed bottom-6 right-6 z-50 max-w-md flex items-center gap-3 px-5 py-4 rounded-2xl bg-zinc-900/95 border border-zinc-700/60 shadow-2xl backdrop-blur-xl transition-all animate-bounce-short">
-                    {notificacion.tipo === 'exito' && (
-                        <div className="p-1.5 bg-emerald-500/10 rounded-xl text-emerald-400 flex-shrink-0">
-                            <CheckCircle size={22} weight="fill" />
-                        </div>
-                    )}
-                    {notificacion.tipo === 'error' && (
-                        <div className="p-1.5 bg-rose-500/10 rounded-xl text-rose-400 flex-shrink-0">
-                            <WarningCircle size={22} weight="fill" />
-                        </div>
-                    )}
-                    {notificacion.tipo === 'info' && (
-                        <div className="p-1.5 bg-sky-500/10 rounded-xl text-sky-400 flex-shrink-0">
-                            <Info size={22} weight="fill" />
-                        </div>
-                    )}
-                    <span className="text-sm font-medium text-zinc-100 flex-1">{notificacion.mensaje}</span>
-                    <button 
-                        onClick={() => setNotificacion(null)}
-                        className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-800"
-                        aria-label="Cerrar notificación"
+            {/* Contenedor de Notificaciones Toast apiladas */}
+            <div className="fixed bottom-6 right-6 z-50 flex flex-col gap-3 max-w-sm sm:max-w-md w-full pointer-events-none">
+                {notificaciones.map((notif) => (
+                    <div 
+                        key={notif.id}
+                        className="pointer-events-auto flex items-center justify-between gap-3 px-5 py-4 rounded-2xl bg-zinc-900/95 border border-zinc-700/60 shadow-2xl backdrop-blur-xl transition-all duration-300"
                     >
-                        <X size={16} />
-                    </button>
-                </div>
-            )}
+                        <div className="flex items-center gap-3 min-w-0">
+                            {notif.tipo === 'exito' && (
+                                <div className="p-1.5 bg-emerald-500/10 rounded-xl text-emerald-400 flex-shrink-0">
+                                    <CheckCircle size={22} weight="fill" />
+                                </div>
+                            )}
+                            {notif.tipo === 'error' && (
+                                <div className="p-1.5 bg-rose-500/10 rounded-xl text-rose-400 flex-shrink-0">
+                                    <WarningCircle size={22} weight="fill" />
+                                </div>
+                            )}
+                            {notif.tipo === 'info' && (
+                                <div className="p-1.5 bg-sky-500/10 rounded-xl text-sky-400 flex-shrink-0">
+                                    <Info size={22} weight="fill" />
+                                </div>
+                            )}
+                            <span className="text-sm font-medium text-zinc-100 break-words">{notif.mensaje}</span>
+                        </div>
+                        <button 
+                            onClick={() => cerrarNotificacion(notif.id)}
+                            className="p-1.5 text-zinc-500 hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-800 flex-shrink-0 ml-2"
+                            aria-label="Cerrar notificación"
+                        >
+                            <X size={16} />
+                        </button>
+                    </div>
+                ))}
+            </div>
         </div>
     );
 }
