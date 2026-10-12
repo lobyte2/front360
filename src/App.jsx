@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { loginRequest } from './authConfig';
-import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package } from '@phosphor-icons/react';
+import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package, CheckCircle, WarningCircle, Info, X } from '@phosphor-icons/react';
 
 const API_GATEWAY_URL = "https://ap96rduot1.execute-api.us-east-1.amazonaws.com/api";
 const USUARIO_ID = 1; 
@@ -14,6 +14,14 @@ function App() {
     const [productos, setProductos] = useState([]);
     const [carrito, setCarrito] = useState(null);
     const [perfil, setPerfil] = useState(null);
+    const [notificacion, setNotificacion] = useState(null);
+
+    const mostrarNotificacion = (mensaje, tipo = 'exito') => {
+        setNotificacion({ mensaje, tipo });
+        setTimeout(() => {
+            setNotificacion(null);
+        }, 3500);
+    };
 
     useEffect(() => {
         if (isAuthenticated) {
@@ -73,19 +81,21 @@ function App() {
                     cantidad: 1 
                 })
             });
-            alert(`Producto agregado al carrito 🍷`);
+            mostrarNotificacion(`"${articulo.nombre || 'Producto'}" agregado al carrito 🍷`, 'exito');
         } catch (error) {
             console.error("Error al agregar producto:", error);
+            mostrarNotificacion("Error al agregar el producto al carrito.", "error");
         }
     };
 
     const limpiarCarrito = async () => {
         try {
             await peticionAutenticada(`/carrito/${USUARIO_ID}/limpiar`, { method: 'DELETE' });
-            alert("Carrito limpiado correctamente.");
+            mostrarNotificacion("Carrito limpiado correctamente.", "info");
             obtenerCarrito();
         } catch (error) {
             console.error("Error al limpiar carrito:", error);
+            mostrarNotificacion("Error al limpiar el carrito.", "error");
         }
     };
 
@@ -123,11 +133,11 @@ function App() {
                     total: total
                 })
             });
-            alert("Orden de compra creada exitosamente. Te llegara un correo pronto y tu pedido pasara a despachos.");
+            mostrarNotificacion("¡Orden creada con éxito! Se notificará por correo y pasará a despachos.", "exito");
             await limpiarCarrito();
         } catch (error) {
             console.error("Error al crear la orden:", error);
-            alert("Hubo un error al procesar el pago.");
+            mostrarNotificacion("Hubo un error al procesar el pago.", "error");
         }
     };
 
@@ -365,6 +375,35 @@ function App() {
                     </div>
                 )}
             </main>
+
+            {/* Notificación Toast flotante en pantalla */}
+            {notificacion && (
+                <div className="fixed bottom-6 right-6 z-50 max-w-md flex items-center gap-3 px-5 py-4 rounded-2xl bg-zinc-900/95 border border-zinc-700/60 shadow-2xl backdrop-blur-xl transition-all animate-bounce-short">
+                    {notificacion.tipo === 'exito' && (
+                        <div className="p-1.5 bg-emerald-500/10 rounded-xl text-emerald-400 flex-shrink-0">
+                            <CheckCircle size={22} weight="fill" />
+                        </div>
+                    )}
+                    {notificacion.tipo === 'error' && (
+                        <div className="p-1.5 bg-rose-500/10 rounded-xl text-rose-400 flex-shrink-0">
+                            <WarningCircle size={22} weight="fill" />
+                        </div>
+                    )}
+                    {notificacion.tipo === 'info' && (
+                        <div className="p-1.5 bg-sky-500/10 rounded-xl text-sky-400 flex-shrink-0">
+                            <Info size={22} weight="fill" />
+                        </div>
+                    )}
+                    <span className="text-sm font-medium text-zinc-100 flex-1">{notificacion.mensaje}</span>
+                    <button 
+                        onClick={() => setNotificacion(null)}
+                        className="p-1 text-zinc-500 hover:text-zinc-300 transition-colors rounded-lg hover:bg-zinc-800"
+                        aria-label="Cerrar notificación"
+                    >
+                        <X size={16} />
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
