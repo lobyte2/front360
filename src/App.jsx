@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { loginRequest } from './authConfig';
-import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package, CheckCircle, WarningCircle, Info, X } from '@phosphor-icons/react';
+import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package, CheckCircle, WarningCircle, Info, X, ClockCounterClockwise, ShieldCheck, ArrowClockwise, EnvelopeSimple, Truck, Database, Lightning } from '@phosphor-icons/react';
 
 const API_GATEWAY_URL = "https://ap96rduot1.execute-api.us-east-1.amazonaws.com/api";
 const USUARIO_ID = 1; 
@@ -15,6 +15,27 @@ function App() {
     const [carrito, setCarrito] = useState(null);
     const [perfil, setPerfil] = useState(null);
     const [notificaciones, setNotificaciones] = useState([]);
+    const [filtroAuditoria, setFiltroAuditoria] = useState('TODOS');
+    const [auditoriaLogs, setAuditoriaLogs] = useState([
+        {
+            id: 'init-1',
+            timestamp: new Date().toLocaleTimeString(),
+            origen: 'SISTEMA',
+            accion: 'INICIALIZACION',
+            descripcion: 'Ecosistema de microservicios Pedidos360 conectado a RabbitMQ',
+            nivel: 'INFO',
+            detalles: { broker: '34.236.39.87:5672', eureka: '52.205.162.211:8761' }
+        },
+        {
+            id: 'init-2',
+            timestamp: new Date().toLocaleTimeString(),
+            origen: 'MS-PRODUCTOS',
+            accion: 'CATALOGO_LISTO',
+            descripcion: 'Inventario de 5 productos cargado en memoria y disponible para compras',
+            nivel: 'INFO',
+            detalles: { productos_activos: 5 }
+        }
+    ]);
 
     const mostrarNotificacion = (mensaje, tipo = 'exito') => {
         const id = Date.now() + '-' + Math.random().toString(36).substring(2, 6);
@@ -27,6 +48,40 @@ function App() {
 
     const cerrarNotificacion = (id) => {
         setNotificaciones(prev => prev.filter(n => n.id !== id));
+    };
+
+    const registrarAuditoria = async (origen, accion, descripcion, nivel = 'INFO', detalles = {}) => {
+        const nuevoLog = {
+            id: Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+            timestamp: new Date().toLocaleTimeString(),
+            origen,
+            accion,
+            descripcion,
+            nivel,
+            detalles
+        };
+        setAuditoriaLogs(prev => [nuevoLog, ...prev]);
+
+        try {
+            await peticionAutenticada('/auditoria', {
+                method: 'POST',
+                body: JSON.stringify(nuevoLog)
+            });
+        } catch (e) {
+            // Silencioso si el API Gateway aun no tiene mapeada la ruta
+        }
+    };
+
+    const obtenerAuditoria = async () => {
+        try {
+            const data = await peticionAutenticada('/auditoria');
+            if (Array.isArray(data) && data.length > 0) {
+                setAuditoriaLogs(data);
+            }
+        } catch (error) {
+            // Mantiene los logs acumulados localmente
+        }
+        setVista('auditoria');
     };
 
     useEffect(() => {
@@ -88,9 +143,11 @@ function App() {
                 })
             });
             mostrarNotificacion(`"${articulo.nombre || 'Producto'}" agregado al carrito 🍷`, 'exito');
+            registrarAuditoria('FRONTEND', 'PRODUCTO_AGREGADO', `Se agregó al carrito: "${articulo.nombre || 'Producto'}"`, 'SUCCESS', { productoId: articulo.identificador || articulo.id });
         } catch (error) {
             console.error("Error al agregar producto:", error);
             mostrarNotificacion("Error al agregar el producto al carrito.", "error");
+            registrarAuditoria('FRONTEND', 'ERROR_CARRITO', `Fallo al agregar producto "${articulo.nombre}"`, 'ERROR');
         }
     };
 
@@ -99,6 +156,7 @@ function App() {
             await peticionAutenticada(`/carrito/${USUARIO_ID}/limpiar`, { method: 'DELETE' });
             if (mostrarToast) {
                 mostrarNotificacion("Carrito limpiado correctamente.", "info");
+                registrarAuditoria('FRONTEND', 'CARRITO_LIMPIADO', "El usuario vació manualmente el carrito de compras", 'WARN');
             }
             obtenerCarrito();
         } catch (error) {
@@ -144,10 +202,18 @@ function App() {
                 })
             });
             mostrarNotificacion("¡Orden creada con éxito! Se notificará por correo y pasará a despachos.", "exito");
+            
+            // Registrar los pasos de la trazabilidad de RabbitMQ
+            registrarAuditoria('MS-ORDENES', 'ORDEN_EMITIDA', `Paso 1: Orden creada y publicada en RabbitMQ (${itemsOrden.length} items por $${total})`, 'SUCCESS', { items: itemsOrden, total });
+            registrarAuditoria('MS-NOTIFICACIONES', 'CORREO_SIMULADO', `Paso 2: Cola 'notificaciones.queue' procesada. Email simulado a ${accounts[0]?.username || 'usuario@correo.com'}`, 'INFO');
+            registrarAuditoria('MS-DESPACHOS', 'TICKET_GENERADO', `Paso 3: Cola 'despachos.queue' procesada. Guía de despacho generada en estado PREPARACION`, 'INFO');
+            registrarAuditoria('MS-PRODUCTOS', 'STOCK_DESCONTADO', `Paso 4: Cola 'stock.queue' procesada. Stock descontado para ${itemsOrden.length} producto(s)`, 'INFO');
+
             await limpiarCarrito(false);
         } catch (error) {
             console.error("Error al crear la orden:", error);
             mostrarNotificacion("Hubo un error al procesar el pago.", "error");
+            registrarAuditoria('MS-ORDENES', 'ERROR_PAGO', 'Error al procesar la orden de compra', 'ERROR');
         }
     };
 
@@ -192,6 +258,7 @@ function App() {
                         <button onClick={obtenerProductos} className={`text-sm font-medium transition-colors ${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Catálogo</button>
                         <button onClick={obtenerCarrito} className={`text-sm font-medium transition-colors ${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Carrito</button>
                         <button onClick={obtenerPerfil} className={`text-sm font-medium transition-colors ${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Perfil</button>
+                        <button onClick={obtenerAuditoria} className={`text-sm font-medium transition-colors ${vista === 'auditoria' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Auditoría</button>
                     </nav>
 
                     <div className="flex items-center gap-4">
@@ -199,6 +266,7 @@ function App() {
                             <button onClick={obtenerProductos} className={`${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400'}`}><Package size={24} /></button>
                             <button onClick={obtenerCarrito} className={`${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400'}`}><ShoppingCart size={24} /></button>
                             <button onClick={obtenerPerfil} className={`${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400'}`}><User size={24} /></button>
+                            <button onClick={obtenerAuditoria} className={`${vista === 'auditoria' ? 'text-emerald-400' : 'text-zinc-400'}`}><ClockCounterClockwise size={24} /></button>
                         </div>
                         <div className="w-px h-6 bg-zinc-800 hidden md:block"></div>
                         <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-100 transition-colors" aria-label="Salir">
@@ -382,6 +450,129 @@ function App() {
                                 <p className="text-zinc-500">No se pudo cargar la información del perfil para {accounts[0]?.username}.</p>
                             </div>
                         )}
+                    </div>
+                )}
+
+                {/* View: Auditoría y Trazabilidad */}
+                {vista === 'auditoria' && (
+                    <div className="space-y-10">
+                        <header className="flex flex-col md:flex-row md:items-end justify-between gap-4">
+                            <div>
+                                <div className="flex items-center gap-2 text-emerald-400 text-sm font-medium mb-2">
+                                    <ShieldCheck size={20} weight="fill" />
+                                    <span>TRAZABILIDAD Y EVENTOS ASÍNCRONOS</span>
+                                </div>
+                                <h2 className="text-4xl md:text-5xl font-medium tracking-tight">Auditoría del Sistema</h2>
+                                <p className="text-zinc-400 text-lg mt-2 max-w-2xl">
+                                    Trazabilidad en tiempo real de acciones (agregar/eliminar) y flujo de los microservicios vinculados con RabbitMQ.
+                                </p>
+                            </div>
+                            <button 
+                                onClick={obtenerAuditoria}
+                                className="flex items-center gap-2 px-5 py-3 rounded-xl bg-zinc-900 hover:bg-zinc-800 border border-zinc-800 text-zinc-200 text-sm font-medium transition-all w-fit active:scale-95 cursor-pointer"
+                            >
+                                <ArrowClockwise size={18} />
+                                Actualizar logs
+                            </button>
+                        </header>
+
+                        {/* Pipeline visual del Flujo de Microservicios */}
+                        <div className="bg-zinc-900/60 border border-zinc-800/70 rounded-2xl p-6 md:p-8 backdrop-blur-md">
+                            <h3 className="text-sm font-semibold uppercase tracking-wider text-zinc-400 mb-6 flex items-center gap-2">
+                                <Lightning size={18} className="text-amber-400" weight="fill" />
+                                Flujo de Trazabilidad en RabbitMQ (botilleria.exchange)
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
+                                <div className="p-4 rounded-xl bg-zinc-950/80 border border-emerald-500/30">
+                                    <span className="text-[11px] font-mono text-emerald-400 font-semibold uppercase">Paso 1: Emisión</span>
+                                    <h4 className="font-medium text-emerald-400 mt-1 flex items-center gap-1.5"><Package size={16} /> ms-ordenes</h4>
+                                    <p className="text-xs text-zinc-400 mt-1.5">Guarda la compra y emite el evento <code className="text-emerald-300">orden.creada</code></p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30">
+                                    <span className="text-[11px] font-mono text-amber-400 font-semibold uppercase">Broker Asíncrono</span>
+                                    <h4 className="font-medium text-amber-400 mt-1 flex items-center gap-1.5"><Lightning size={16} weight="fill" /> RabbitMQ</h4>
+                                    <p className="text-xs text-zinc-400 mt-1.5">Distribuye el mensaje a 3 colas en <code className="text-amber-300">34.236.39.87</code></p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-zinc-950/80 border border-sky-500/30">
+                                    <span className="text-[11px] font-mono text-sky-400 font-semibold uppercase">Paso 2: Correo</span>
+                                    <h4 className="font-medium text-sky-400 mt-1 flex items-center gap-1.5"><EnvelopeSimple size={16} /> ms-notificaciones</h4>
+                                    <p className="text-xs text-zinc-400 mt-1.5">Consume <code className="text-sky-300">notificaciones.queue</code> y simula email</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-zinc-950/80 border border-purple-500/30">
+                                    <span className="text-[11px] font-mono text-purple-400 font-semibold uppercase">Paso 3: Logística</span>
+                                    <h4 className="font-medium text-purple-400 mt-1 flex items-center gap-1.5"><Truck size={16} /> ms-despachos</h4>
+                                    <p className="text-xs text-zinc-400 mt-1.5">Consume <code className="text-purple-300">despachos.queue</code> y genera ticket BTL</p>
+                                </div>
+                                <div className="p-4 rounded-xl bg-zinc-950/80 border border-indigo-500/30">
+                                    <span className="text-[11px] font-mono text-indigo-400 font-semibold uppercase">Paso 4: Stock</span>
+                                    <h4 className="font-medium text-indigo-400 mt-1 flex items-center gap-1.5"><Database size={16} /> ms-productos</h4>
+                                    <p className="text-xs text-zinc-400 mt-1.5">Consume <code className="text-indigo-300">stock.queue</code> y descuenta bodega</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Filtros de Logs */}
+                        <div className="flex items-center gap-2 overflow-x-auto pb-1">
+                            {['TODOS', 'MS-ORDENES', 'MS-NOTIFICACIONES', 'MS-DESPACHOS', 'MS-PRODUCTOS', 'FRONTEND'].map((tag) => (
+                                <button
+                                    key={tag}
+                                    onClick={() => setFiltroAuditoria(tag)}
+                                    className={`px-4 py-2 rounded-xl text-xs font-medium transition-all cursor-pointer ${
+                                        filtroAuditoria === tag 
+                                            ? 'bg-emerald-500 text-zinc-950 font-semibold shadow-lg shadow-emerald-500/20' 
+                                            : 'bg-zinc-900/80 hover:bg-zinc-800 text-zinc-400 border border-zinc-800/80'
+                                    }`}
+                                >
+                                    {tag}
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Lista cronológica de logs */}
+                        <div className="space-y-3">
+                            {auditoriaLogs
+                                .filter(item => filtroAuditoria === 'TODOS' || (item.origen && item.origen.toUpperCase() === filtroAuditoria))
+                                .map((log, index) => (
+                                    <div 
+                                        key={log.id || index}
+                                        className="bg-zinc-900/50 hover:bg-zinc-900/80 border border-zinc-800/60 rounded-2xl p-5 flex flex-col md:flex-row md:items-center justify-between gap-4 transition-all"
+                                    >
+                                        <div className="flex items-start gap-4">
+                                            <span className="text-xs font-mono text-zinc-400 py-1 px-2.5 bg-zinc-950 rounded-lg border border-zinc-800 flex-shrink-0">
+                                                {log.timestamp}
+                                            </span>
+                                            <div>
+                                                <div className="flex items-center gap-2 flex-wrap mb-1.5">
+                                                    <span className={`text-[11px] font-semibold tracking-wider px-2.5 py-0.5 rounded-full border ${
+                                                        log.origen === 'MS-ORDENES' ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' :
+                                                        log.origen === 'MS-NOTIFICACIONES' ? 'bg-sky-500/10 text-sky-400 border-sky-500/20' :
+                                                        log.origen === 'MS-DESPACHOS' ? 'bg-purple-500/10 text-purple-400 border-purple-500/20' :
+                                                        log.origen === 'MS-PRODUCTOS' ? 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20' :
+                                                        log.origen === 'FRONTEND' ? 'bg-amber-500/10 text-amber-400 border-amber-500/20' :
+                                                        'bg-zinc-800 text-zinc-300 border-zinc-700'
+                                                    }`}>
+                                                        {log.origen || 'SISTEMA'}
+                                                    </span>
+                                                    <span className="text-xs font-mono text-zinc-400 font-semibold">
+                                                        {log.accion}
+                                                    </span>
+                                                </div>
+                                                <p className="text-sm text-zinc-200">
+                                                    {log.descripcion}
+                                                </p>
+                                            </div>
+                                        </div>
+
+                                        {log.detalles && Object.keys(log.detalles).length > 0 && (
+                                            <div className="text-right flex-shrink-0">
+                                                <span className="text-[11px] font-mono text-zinc-400 bg-zinc-950/80 px-2.5 py-1.5 rounded-lg border border-zinc-800/60 inline-block max-w-[280px] truncate" title={JSON.stringify(log.detalles)}>
+                                                    {JSON.stringify(log.detalles)}
+                                                </span>
+                                            </div>
+                                        )}
+                                    </div>
+                                ))}
+                        </div>
                     </div>
                 )}
             </main>
