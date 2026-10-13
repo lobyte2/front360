@@ -150,6 +150,7 @@ function App() {
     useEffect(() => {
         if (isAuthenticated) {
             obtenerProductos();
+            obtenerCarrito(false);
         }
     }, [isAuthenticated]);
 
@@ -186,11 +187,13 @@ function App() {
         }
     };
 
-    const obtenerCarrito = async () => {
+    const obtenerCarrito = async (cambiarVista = true) => {
         try {
             const data = await peticionAutenticada(`/carrito/${USUARIO_ID}`);
             setCarrito(data);
-            setVista('carrito');
+            if (cambiarVista) {
+                setVista('carrito');
+            }
         } catch (error) {
             console.error("Error al cargar carrito:", error);
         }
@@ -225,7 +228,7 @@ function App() {
             });
             mostrarNotificacion(`"${articulo.nombre || 'Producto'}" agregado al carrito 🍷`, 'exito');
             registrarAuditoria('FRONTEND', 'PRODUCTO_AGREGADO', `Se agregó al carrito: "${articulo.nombre || 'Producto'}"`, 'SUCCESS', { productoId: id, enCarrito: cantidadEnCarrito + 1, stockTotal: stockDisponible });
-            obtenerCarrito();
+            obtenerCarrito(false);
         } catch (error) {
             console.error("Error al agregar producto:", error);
             mostrarNotificacion("Error al agregar el producto al carrito.", "error");
@@ -233,14 +236,14 @@ function App() {
         }
     };
 
-    const limpiarCarrito = async (mostrarToast = true) => {
+    const limpiarCarrito = async (mostrarToast = true, cambiarVista = false) => {
         try {
             await peticionAutenticada(`/carrito/${USUARIO_ID}/limpiar`, { method: 'DELETE' });
             if (mostrarToast) {
                 mostrarNotificacion("Carrito limpiado correctamente.", "info");
                 registrarAuditoria('FRONTEND', 'CARRITO_LIMPIADO', "El usuario vació manualmente el carrito de compras", 'WARN');
             }
-            obtenerCarrito();
+            obtenerCarrito(cambiarVista);
         } catch (error) {
             console.error("Error al limpiar carrito:", error);
             if (mostrarToast) {
@@ -348,7 +351,7 @@ function App() {
                     
                     <nav className="hidden md:flex items-center gap-8">
                         <button onClick={obtenerProductos} className={`text-sm font-medium transition-colors ${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Catálogo</button>
-                        <button onClick={obtenerCarrito} className={`text-sm font-medium transition-colors ${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Carrito</button>
+                        <button onClick={() => obtenerCarrito(true)} className={`text-sm font-medium transition-colors ${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Carrito</button>
                         <button onClick={obtenerPerfil} className={`text-sm font-medium transition-colors ${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Perfil</button>
                         <button onClick={obtenerAuditoria} className={`text-sm font-medium transition-colors ${vista === 'auditoria' ? 'text-emerald-400' : 'text-zinc-400 hover:text-zinc-100'}`}>Auditoría</button>
                     </nav>
@@ -356,7 +359,7 @@ function App() {
                     <div className="flex items-center gap-4">
                         <div className="md:hidden flex gap-4">
                             <button onClick={obtenerProductos} className={`${vista === 'catalogo' ? 'text-emerald-400' : 'text-zinc-400'}`}><Package size={24} /></button>
-                            <button onClick={obtenerCarrito} className={`${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400'}`}><ShoppingCart size={24} /></button>
+                            <button onClick={() => obtenerCarrito(true)} className={`${vista === 'carrito' ? 'text-emerald-400' : 'text-zinc-400'}`}><ShoppingCart size={24} /></button>
                             <button onClick={obtenerPerfil} className={`${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400'}`}><User size={24} /></button>
                             <button onClick={obtenerAuditoria} className={`${vista === 'auditoria' ? 'text-emerald-400' : 'text-zinc-400'}`}><ClockCounterClockwise size={24} /></button>
                         </div>
