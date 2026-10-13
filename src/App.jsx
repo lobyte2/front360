@@ -98,13 +98,13 @@ function App() {
 
     const limpiarAuditoria = async (modo = '10') => {
         setMenuLimpiarAbierto(false);
-        let nuevaLista = [...auditoriaLogs];
-        let cantidad = 10;
+        let borrados = [];
+        let cantidad = 0;
         let texto = "";
 
         if (modo === '10') {
-            cantidad = Math.min(10, nuevaLista.length);
-            nuevaLista = nuevaLista.slice(cantidad);
+            cantidad = Math.min(10, auditoriaLogs.length);
+            borrados = auditoriaLogs.slice(0, cantidad).map(l => l.id);
             texto = `Se eliminaron los ${cantidad} registros más recientes.`;
         } else if (modo === 'pagina') {
             const logsFiltrados = auditoriaLogs.filter(item => 
@@ -112,17 +112,26 @@ function App() {
             );
             const indexInicio = (paginaAuditoria - 1) * logsPorPagina;
             const logsPagina = logsFiltrados.slice(indexInicio, indexInicio + logsPorPagina);
-            const idsPagina = new Set(logsPagina.map(l => l.id));
-            cantidad = idsPagina.size;
-            nuevaLista = nuevaLista.filter(l => !idsPagina.has(l.id));
+            borrados = logsPagina.map(l => l.id);
+            cantidad = borrados.length;
             texto = `Se eliminaron ${cantidad} registros de la página actual.`;
         } else if (modo === 'todos') {
-            cantidad = nuevaLista.length;
-            nuevaLista = [];
+            borrados = auditoriaLogs.map(l => l.id);
+            cantidad = borrados.length;
             texto = "Se eliminaron todos los registros de auditoría.";
         }
 
-        setAuditoriaLogs(nuevaLista);
+        // Persistir los IDs eliminados en el navegador
+        try {
+            const guardados = JSON.parse(localStorage.getItem('pedidos360_logs_borrados') || '[]');
+            const actualizados = [...new Set([...guardados, ...borrados])];
+            localStorage.setItem('pedidos360_logs_borrados', JSON.stringify(actualizados));
+        } catch (e) {
+            console.warn("Error con localStorage:", e);
+        }
+
+        // Actualizar estado visual
+        setAuditoriaLogs(prev => prev.filter(l => !borrados.includes(l.id)));
         setPaginaAuditoria(1);
         mostrarNotificacion(texto, 'info');
 
@@ -130,15 +139,20 @@ function App() {
             const query = modo === 'todos' ? '' : `?cantidad=${cantidad}`;
             await peticionAutenticada(`/auditoria${query}`, { method: 'DELETE' });
         } catch (err) {
-            // Silencioso si API Gateway no implementa DELETE
+            // Silencioso si API Gateway no tiene mapeado DELETE
         }
     };
 
     const obtenerAuditoria = async () => {
         try {
             const data = await peticionAutenticada('/auditoria');
-            if (Array.isArray(data) && data.length > 0) {
-                setAuditoriaLogs(data);
+            if (Array.isArray(data)) {
+                let guardados = [];
+                try {
+                    guardados = JSON.parse(localStorage.getItem('pedidos360_logs_borrados') || '[]');
+                } catch (e) {}
+                const filtrados = data.filter(log => !guardados.includes(log.id));
+                setAuditoriaLogs(filtrados);
             }
         } catch (error) {
             // Mantiene los logs acumulados localmente
