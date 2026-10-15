@@ -46,8 +46,9 @@ async function bootstrap() {
   if (callbackDeAzure) {
     try {
       const response = await msalInstance.handleRedirectPromise();
-      if (response) {
-        console.info("Autenticacion Azure completada:", response.account?.username);
+      if (response?.account) {
+        msalInstance.setActiveAccount(response.account);
+        console.info("Autenticacion Azure completada:", response.account.username);
       }
     } catch (error) {
       console.error("Error al procesar la respuesta de Azure:", error);
@@ -58,6 +59,14 @@ async function bootstrap() {
   }
 
   sessionStorage.removeItem(PENDING_AUTH_PROVIDER_KEY);
+
+  // Asegura que siempre exista una cuenta activa configurada si hay sesiones en caché
+  if (!msalInstance.getActiveAccount()) {
+    const cuentas = msalInstance.getAllAccounts();
+    if (cuentas.length > 0) {
+      msalInstance.setActiveAccount(cuentas[0]);
+    }
+  }
 
   ReactDOM.createRoot(document.getElementById('root')).render(
     <React.StrictMode>

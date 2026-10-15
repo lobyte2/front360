@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useMsal } from '@azure/msal-react';
+import { useMsal, useIsAuthenticated } from '@azure/msal-react';
 import { useAuth } from 'react-oidc-context';
 import {
     loginRequest,
@@ -14,14 +14,16 @@ const API_GATEWAY_URL = "https://ap96rduot1.execute-api.us-east-1.amazonaws.com/
 const USUARIO_ID = 1; 
 
 function App() {
-    const { instance, accounts } = useMsal();
+    const { instance, accounts, inProgress } = useMsal();
     const cognito = useAuth();
 
-    const sesionAzure = accounts.length > 0;
+    const isAzureAuth = useIsAuthenticated();
+    const sesionAzure = isAzureAuth || accounts.length > 0;
     const sesionCognito = cognito.isAuthenticated;
     const isAuthenticated = sesionAzure || sesionCognito;
+    const cuentaAzureActiva = instance.getActiveAccount() || accounts[0];
     const nombreUsuario = sesionAzure
-        ? (accounts[0]?.name || accounts[0]?.username)
+        ? (cuentaAzureActiva?.name || cuentaAzureActiva?.username || "Usuario Institucional")
         : (cognito.user?.profile?.email || cognito.user?.profile?.phone_number || "Cliente AWS");
     const proveedorActual = sesionAzure ? "Azure AD" : "AWS Cognito";
     
@@ -177,35 +179,49 @@ function App() {
     };
 
     useEffect(() => {
-        if (isAuthenticated) {
+        if (isAuthenticated && inProgress === "none") {
             obtenerProductos();
             obtenerCarrito(false);
         }
-    }, [isAuthenticated]);
+    }, [isAuthenticated, inProgress]);
 
     const obtenerToken = async () => {
         if (sesionAzure) {
+            const cuenta = cuentaAzureActiva || instance.getAllAccounts()[0];
+            if (!cuenta) {
+                console.warn("[obtenerToken] No hay cuenta activa de Azure en sesión");
+                return null;
+            }
             try {
                 const response = await instance.acquireTokenSilent({
                     ...loginRequest,
-                    account: accounts[0]
+                    account: cuenta
                 });
                 return response.accessToken;
             } catch (err) {
-                console.warn("Fallo token silencioso Azure, solicitando popup/redirect:", err);
-                return null;
+                console.warn("[obtenerToken] Fallo acquireTokenSilent de Azure, intentando popup:", err);
+                try {
+                    const response = await instance.acquireTokenPopup({
+                        ...loginRequest,
+                        account: cuenta
+                    });
+                    return response.accessToken;
+                } catch (popupErr) {
+                    console.error("[obtenerToken] Fallo definitivo al adquirir token de Azure:", popupErr);
+                    return null;
+                }
             }
         } else if (sesionCognito) {
             const usuario = cognito.user;
             if (!usuario) return null;
-            if (!usuario.expired) {
+            if (!usuario.expired && usuario.access_token) {
                 return usuario.access_token;
             }
             try {
                 const renovado = await cognito.signinSilent();
                 return renovado?.access_token ?? null;
             } catch (err) {
-                console.error("Error al renovar token de Cognito:", err);
+                console.error("[obtenerToken] Error al renovar token de Cognito:", err);
                 return null;
             }
         }
@@ -214,6 +230,10 @@ function App() {
 
     const peticionAutenticada = async (endpoint, options = {}) => {
         const token = await obtenerToken();
+        if (!token) {
+            console.error(`[peticionAutenticada] Token nulo para ${endpoint}. Cancelando petición.`);
+            throw new Error(`Token de autenticación no disponible para ${endpoint}`);
+        }
         const res = await fetch(`${API_GATEWAY_URL}${endpoint}`, {
             ...options,
             headers: {
@@ -222,7 +242,11 @@ function App() {
                 "Content-Type": "application/json"
             }
         });
-        if (!res.ok) throw new Error(`Error HTTP: ${res.status}`);
+        if (!res.ok) {
+            const errorBody = await res.text().catch(() => "");
+            console.error(`[peticionAutenticada] HTTP ${res.status} en ${endpoint}:`, errorBody);
+            throw new Error(`Error HTTP: ${res.status}`);
+        }
         const text = await res.text();
         return text ? JSON.parse(text) : null;
     };
@@ -304,7 +328,7 @@ function App() {
 
     const obtenerPerfil = async () => {
         try {
-            const username = sesionAzure ? (accounts[0]?.username || 'admin') : (cognito.user?.profile?.email || 'admin');
+            const username = sesionAzure ? (cuentaAzureActiva?.username || 'admin') : (cognito.user?.profile?.email || 'admin');
             const data = await peticionAutenticada(`/usuarios/perfil/${username}`);
             setPerfil(data);
             setVista('perfil');
@@ -342,7 +366,7 @@ function App() {
             await peticionAutenticada('/ordenes/nueva', {
                 method: 'POST',
                 body: JSON.stringify({
-                    usuarioId: sesionAzure ? (accounts[0]?.username || "anonimo") : (cognito.user?.profile?.email || "anonimo-cognito"),
+                    usuarioId: sesionAzure ? (cuentaAzureActiva?.username || "anonimo") : (cognito.user?.profile?.email || "anonimo-cognito"),
                     items: itemsOrden,
                     total: total
                 })
