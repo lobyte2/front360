@@ -1,6 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { useMsal, useIsAuthenticated } from '@azure/msal-react';
-import { loginRequest } from './authConfig';
+import { useMsal } from '@azure/msal-react';
+import { useAuth } from 'react-oidc-context';
+import {
+    loginRequest,
+    signOutRedirect,
+    PENDING_AUTH_PROVIDER_KEY,
+    AUTH_PROVIDER_AZURE,
+    AUTH_PROVIDER_COGNITO
+} from './authConfig';
 import { ShoppingCart, User, Wine, SignOut, ArrowRight, Trash, Package, CheckCircle, WarningCircle, Info, X, ClockCounterClockwise, ShieldCheck, ArrowClockwise, EnvelopeSimple, Truck, Database, Lightning, CaretLeft, CaretRight, Broom } from '@phosphor-icons/react';
 
 const API_GATEWAY_URL = "https://ap96rduot1.execute-api.us-east-1.amazonaws.com/api";
@@ -8,7 +15,15 @@ const USUARIO_ID = 1;
 
 function App() {
     const { instance, accounts } = useMsal();
-    const isAuthenticated = useIsAuthenticated();
+    const cognito = useAuth();
+
+    const sesionAzure = accounts.length > 0;
+    const sesionCognito = cognito.isAuthenticated;
+    const isAuthenticated = sesionAzure || sesionCognito;
+    const nombreUsuario = sesionAzure
+        ? (accounts[0]?.name || accounts[0]?.username)
+        : (cognito.user?.profile?.email || cognito.user?.profile?.phone_number || "Cliente AWS");
+    const proveedorActual = sesionAzure ? "Azure AD" : "AWS Cognito";
     
     const [vista, setVista] = useState('catalogo');
     const [productos, setProductos] = useState([]);
@@ -169,11 +184,32 @@ function App() {
     }, [isAuthenticated]);
 
     const obtenerToken = async () => {
-        const response = await instance.acquireTokenSilent({
-            ...loginRequest,
-            account: accounts[0]
-        });
-        return response.accessToken;
+        if (sesionAzure) {
+            try {
+                const response = await instance.acquireTokenSilent({
+                    ...loginRequest,
+                    account: accounts[0]
+                });
+                return response.accessToken;
+            } catch (err) {
+                console.warn("Fallo token silencioso Azure, solicitando popup/redirect:", err);
+                return null;
+            }
+        } else if (sesionCognito) {
+            const usuario = cognito.user;
+            if (!usuario) return null;
+            if (!usuario.expired) {
+                return usuario.access_token;
+            }
+            try {
+                const renovado = await cognito.signinSilent();
+                return renovado?.access_token ?? null;
+            } catch (err) {
+                console.error("Error al renovar token de Cognito:", err);
+                return null;
+            }
+        }
+        return null;
     };
 
     const peticionAutenticada = async (endpoint, options = {}) => {
@@ -268,7 +304,7 @@ function App() {
 
     const obtenerPerfil = async () => {
         try {
-            const username = accounts[0]?.username;
+            const username = sesionAzure ? (accounts[0]?.username || 'admin') : (cognito.user?.profile?.email || 'admin');
             const data = await peticionAutenticada(`/usuarios/perfil/${username}`);
             setPerfil(data);
             setVista('perfil');
@@ -306,7 +342,7 @@ function App() {
             await peticionAutenticada('/ordenes/nueva', {
                 method: 'POST',
                 body: JSON.stringify({
-                    usuarioId: accounts[0]?.username || "anonimo",
+                    usuarioId: sesionAzure ? (accounts[0]?.username || "anonimo") : (cognito.user?.profile?.email || "anonimo-cognito"),
                     items: itemsOrden,
                     total: total
                 })
@@ -326,8 +362,36 @@ function App() {
         }
     };
 
-    const handleLogin = () => instance.loginRedirect(loginRequest);
-    const handleLogout = () => instance.logoutRedirect();
+    const handleLoginAzure = () => {
+        sessionStorage.setItem(PENDING_AUTH_PROVIDER_KEY, AUTH_PROVIDER_AZURE);
+        instance.loginRedirect(loginRequest).catch(e => {
+            sessionStorage.removeItem(PENDING_AUTH_PROVIDER_KEY);
+            console.error("Error en login Azure:", e);
+        });
+    };
+
+    const handleLoginCognito = async () => {
+        sessionStorage.setItem(PENDING_AUTH_PROVIDER_KEY, AUTH_PROVIDER_COGNITO);
+        try {
+            await cognito.signinRedirect();
+        } catch (e) {
+            sessionStorage.removeItem(PENDING_AUTH_PROVIDER_KEY);
+            console.error("Error en login Cognito:", e);
+        }
+    };
+
+    const handleLogout = async () => {
+        if (sesionAzure) {
+            instance.logoutRedirect().catch(e => console.error(e));
+        } else if (sesionCognito) {
+            try {
+                await cognito.removeUser();
+            } catch (e) {
+                console.error(e);
+            }
+            signOutRedirect();
+        }
+    };
 
     if (!isAuthenticated) {
         return (
@@ -338,14 +402,50 @@ function App() {
                     </div>
                     <div className="space-y-3">
                         <h1 className="text-4xl md:text-5xl font-medium tracking-tight">Pedidos360</h1>
-                        <p className="text-zinc-400 text-lg">Acceso exclusivo al catálogo de bodega.</p>
+                        <p className="text-zinc-400 text-lg">Acceso multicloud al catálogo de bodega.</p>
                     </div>
-                    <button 
-                        onClick={handleLogin}
-                        className="w-full flex items-center justify-center gap-2 bg-emerald-500 hover:bg-emerald-600 text-zinc-950 font-medium px-6 py-4 rounded-xl transition-all active:scale-[0.98]"
-                    >
-                        Ingresar con Azure AD <ArrowRight size={20} />
-                    </button>
+
+                    <div className="w-full space-y-4">
+                        {/* Botón 1: Azure AD (Institucional) */}
+                        <button 
+                            onClick={handleLoginAzure}
+                            className="w-full flex items-center justify-between bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg shadow-blue-900/20"
+                        >
+                            <span className="flex items-center gap-3">
+                                <span className="grid grid-cols-2 gap-0.5 w-4 h-4">
+                                    <span className="bg-[#f25022] w-2 h-2"></span>
+                                    <span className="bg-[#7fba00] w-2 h-2"></span>
+                                    <span className="bg-[#00a4ef] w-2 h-2"></span>
+                                    <span className="bg-[#ffb900] w-2 h-2"></span>
+                                </span>
+                                <span>Ingreso Institucional (Azure AD)</span>
+                            </span>
+                            <ArrowRight size={20} />
+                        </button>
+
+                        {/* Botón 2: AWS Cognito (Clientes / Externos) */}
+                        <button 
+                            onClick={handleLoginCognito}
+                            disabled={cognito.isLoading}
+                            className="w-full flex items-center justify-between bg-zinc-900 hover:bg-zinc-800 border border-zinc-700 text-zinc-100 font-medium px-6 py-4 rounded-xl transition-all active:scale-[0.98] shadow-lg"
+                        >
+                            <span className="flex items-center gap-3">
+                                <span className="flex gap-0.5 items-end h-4">
+                                    <span className="bg-amber-500 w-1.5 h-2 rounded-t-xs"></span>
+                                    <span className="bg-amber-500 w-1.5 h-3.5 rounded-t-xs"></span>
+                                    <span className="bg-amber-500 w-1.5 h-2.5 rounded-t-xs"></span>
+                                </span>
+                                <span>{cognito.isLoading ? 'Conectando con AWS...' : 'Ingreso Clientes / Externos (Cognito)'}</span>
+                            </span>
+                            <ArrowRight size={20} className="text-amber-400" />
+                        </button>
+
+                        {cognito.error && (
+                            <p className="text-rose-400 text-xs text-left bg-rose-950/40 border border-rose-900/50 p-3 rounded-lg">
+                                Error en AWS Cognito: {cognito.error.message}
+                            </p>
+                        )}
+                    </div>
                 </div>
             </div>
         );
@@ -377,9 +477,20 @@ function App() {
                             <button onClick={obtenerPerfil} className={`${vista === 'perfil' ? 'text-emerald-400' : 'text-zinc-400'}`}><User size={24} /></button>
                             <button onClick={obtenerAuditoria} className={`${vista === 'auditoria' ? 'text-emerald-400' : 'text-zinc-400'}`}><ClockCounterClockwise size={24} /></button>
                         </div>
+
+                        {/* Badge de Usuario y Proveedor de Identidad */}
+                        <div className="hidden lg:flex items-center gap-2 px-3 py-1.5 bg-zinc-900 border border-zinc-800 rounded-full text-xs">
+                            <span className={`w-2 h-2 rounded-full ${sesionAzure ? 'bg-blue-400' : 'bg-amber-400'}`}></span>
+                            <span className="text-zinc-300 font-medium truncate max-w-[160px]">{nombreUsuario}</span>
+                            <span className={`text-[10px] font-semibold uppercase px-1.5 py-0.5 rounded ${sesionAzure ? 'bg-blue-950 text-blue-300' : 'bg-amber-950 text-amber-300'}`}>
+                                {sesionAzure ? 'Azure AD' : 'Cognito'}
+                            </span>
+                        </div>
+
                         <div className="w-px h-6 bg-zinc-800 hidden md:block"></div>
-                        <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-100 transition-colors" aria-label="Salir">
-                            <SignOut size={24} />
+                        <button onClick={handleLogout} className="text-zinc-400 hover:text-zinc-100 transition-colors flex items-center gap-1.5 text-xs" title="Cerrar Sesión">
+                            <SignOut size={20} />
+                            <span className="hidden sm:inline">Salir</span>
                         </button>
                     </div>
                 </div>
@@ -617,8 +728,12 @@ function App() {
                                 </div>
                                 <div className="space-y-4">
                                     <div>
-                                        <p className="text-sm text-zinc-500 mb-1">Usuario de Azure AD</p>
-                                        <p className="font-medium">{perfil.nombreUsuario}</p>
+                                        <p className="text-sm text-zinc-500 mb-1">Proveedor de Identidad</p>
+                                        <p className="font-medium text-emerald-400">{proveedorActual}</p>
+                                    </div>
+                                    <div>
+                                        <p className="text-sm text-zinc-500 mb-1">Identificador de Usuario</p>
+                                        <p className="font-medium">{nombreUsuario}</p>
                                     </div>
                                     <div>
                                         <p className="text-sm text-zinc-500 mb-1">Estado de la cuenta</p>
@@ -631,7 +746,7 @@ function App() {
                             </div>
                         ) : (
                             <div className="py-20 text-center border border-dashed border-zinc-800 rounded-2xl">
-                                <p className="text-zinc-500">No se pudo cargar la información del perfil para {accounts[0]?.username}.</p>
+                                <p className="text-zinc-500">No se pudo cargar la información del perfil para {nombreUsuario}.</p>
                             </div>
                         )}
                     </div>
